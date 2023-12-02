@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/video.js/7.11.7/video-js.min.css"
+      rel="stylesheet"
+    />
+
+    <script src="https://vjs.zencdn.net/8.6.1/video.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/video.js/7.11.7/video.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/videojs-contrib-eme@3.8.0/dist/videojs-contrib-eme.js"></script>
+
+    <title>Test VideJS DRM</title>
+    <style>
+      .button {
+        padding: 0.5rem;
+        margin: 0.25rem;
+      }
+
+      .video-js .vjs-title-bar {
+        background: rgba(0, 0, 0, 0.1);
+        color: white;
+        display: none;
+        font-size: 2em;
+        padding: 0.5em;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+      }
+
+      .vjs-visible-text {
+        display: block;
+        color: white;
+      }
+
+      .vjs-seekbar:hover {
+        border: 5px solid green;
+      }
+
+      /* 
+  Only show the title bar after playback has begun (so as not to hide
+  the big play button) and only when paused or when the user is 
+  interacting with the player.
+    */
+      .video-js.vjs-paused.vjs-has-started .vjs-title-bar,
+      .video-js.vjs-user-active.vjs-has-started .vjs-title-bar {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div style="margin: 50px auto">
+      <video id="my-video" class="video-js"></video>
+      <div id="chapters-menu">
+        <div>Chapters:</div>
+      </div>
+    </div>
+
+    <script>
+      let Component = videojs.getComponent("Component");
+
+      let TitleBar = videojs.extend(Component, {
+        constructor: function (player, options) {
+          Component.apply(this, arguments);
+
+          if (options.text) {
+            this.updateTextContent(options.text);
+          }
+        },
+        createEl: function () {
+          return videojs.dom.createEl("div", {
+            className: "vjs-title-bar",
+          });
+        },
+        updateTextContent: function (text) {
+          if (typeof text !== "string") {
+            text = "Title Unknown";
+          }
+
+          videojs.dom.emptyEl(this.el());
+          videojs.dom.appendContent(this.el(), text);
+        },
+      });
+
+      let PlayProgressBar = videojs.extend(Component, {
+        constructor: function (player, options) {
+          Component.apply(this, arguments);
+        },
+        createEl: function () {
+          return videojs.dom.createEl("div", {
+            className: "vjs-seekbar",
+          });
+        },
+        update: function (rect, point) {
+          console.log("Comes here", rect, point);
+        },
+      });
+
+      videojs.registerComponent("TitleBar", TitleBar);
+      videojs.registerComponent("PlayProgressBar", PlayProgressBar);
+
+      let player = videojs(
+        "my-video",
+        {
+          controls: true,
+          fluid: true,
+          controlBar: { skipButtons: { forward: 5, backward: 10 } },
+          userActions: {
+            hotkeys: function (event) {
+              const currentTime = this.currentTime();
+              const duration = this.duration();
+              const currentVolume = this.volume();
+              const isFullScreen = this.isFullscreen();
+
+              // `j` key = seek 10s back
+              if (event.which === 74) {
+                // Check if the video has reached at least 10s or seek to start
+                if (duration <= 10) {
+                  this.currentTime(0);
+                } else {
+                  this.currentTime(currentTime - 10);
+                }
+              }
+
+              // `l` key = seek 10s froward
+              if (event.which === 76) {
+                // Chcek if video has finished or seek to last
+                if (currentTime + 10 >= duration) {
+                  this.currentTime(duration);
+                } else {
+                  this.currentTime(currentTime + 10);
+                }
+              }
+
+              // `k` key = toggle play pause
+              if (event.which === 75) {
+                if (this.paused()) {
+                  this.play();
+                } else {
+                  this.pause();
+                }
+              }
+
+              // `Up` key = increase volume by 5
+              if (event.which === 38) {
+                if (currentVolume != 1) {
+                  this.volume(parseFloat(currentVolume + 0.05).toFixed(2));
+                }
+              }
+
+              // `Up` key = decrease volume by 5
+              if (event.which === 40) {
+                if (currentVolume != 0) {
+                  this.volume(parseFloat(currentVolume - 0.05).toFixed(2));
+                }
+              }
+            },
+            // Double click to toggle full screen
+            doubleClick: function (e) {
+              if (this.isFullscreen()) {
+                this.exitFullscreen();
+              } else {
+                this.requestFullscreen();
+              }
+            },
+          },
+          playbackRates: [0.75, 1, 1.25, 1.5, 1.75, 2, 2.25],
+          html5: {
+            vhs: { overrideNative: true },
+          },
+        },
+        function () {
+          var player = this;
+          player.eme();
+          player.src({
+            src: "https://cdn.bitmovin.com/content/assets/art-of-motion_drm/mpds/11331.mpd",
+            type: "application/dash+xml",
+            keySystems: {
+              "com.widevine.alpha":
+                "https://cwip-shaka-proxy.appspot.com/no_auth",
+            },
+          });
+
+          player.ready(function () {
+
+            const seekbar = player.controlBar.progressControl;
+            console.log({seekbar})
+
+            player.tech(true).on("keystatuschange", function (event) {
+              // console.log("event: ", event);
+            });
+          });
+        },
+      );
+
+      player.addChild("TitleBar", { text: "The Title of The Video!" });
+      // player.addChild('Chapters');
+
+      let Button = videojs.getComponent("Button");
+      let button = new Button(player, {
+        clickHandler: function (event) {
+          videojs.log("Clicked");
+        },
+      });
+      button.controlText("Click me");
+      button.addClass("vjs-visible-text");
+
+      player.getChild("ControlBar").addChild(button);
+
+      /* Chapters */
+      const chaptersMenu = document.getElementById("chapters-menu");
+      let chapters = [
+        {
+          endTime: 1.37,
+          name: "Intro",
+        },
+        {
+          endTime: 2.12,
+          name: "Halfway",
+        },
+        {
+          endTime: 3.12,
+          name: "Outro",
+        },
+      ];
+
+      const chaptersMenuItems = chapters.map((ele) => {
+        const element = document.createElement("button");
+        element.textContent = ele.name;
+        element.className = "button";
+        element.onclick = function (e) {
+          const mins = parseInt(ele.endTime.toString().split(".")[0]) * 60;
+          const secs = parseInt(ele.endTime.toString().split(".")[1]);
+          const time = mins + secs;
+
+          console.log(time)
+
+          const player = videojs.getPlayer("my-video");
+          if (!player) {
+            console.log("Something went wrong!");
+          }
+
+          // Seek to this chapter
+          player.currentTime(time);
+        };
+        return element;
+      });
+      chaptersMenuItems.forEach((item) => chaptersMenu.appendChild(item));
+    </script>
+
+    <script>
+      let a = videojs.getPlayer("my-video");
+      console.log(a);
+    </script>
+  </body>
+</html>
